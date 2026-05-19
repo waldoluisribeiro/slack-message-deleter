@@ -73,7 +73,7 @@ const deleteMessage = async (unixTimestamp) => {
   };
 };
 
-const deleteMessages = async (messages, insideThread) => {
+const deleteMessagesAndThreads = async (messages, insideThread) => {
   for (const message of messages) {
     await delay(500);
 
@@ -84,7 +84,7 @@ const deleteMessages = async (messages, insideThread) => {
         (message) => message.user === USER,
       );
       console.log("Deleting thread messages...");
-      await deleteMessages(userThreadMessages, true);
+      await deleteMessagesAndThreads(userThreadMessages, true);
       continue;
     }
 
@@ -117,7 +117,7 @@ const main = async () => {
       form.set("cursor", cursor);
     }
 
-    console.log("Fetching messages...");
+    console.log("Fetching messages and threads...");
 
     // https://docs.slack.dev/reference/methods/conversations.history/
     const data = await fetch(
@@ -149,9 +149,11 @@ const main = async () => {
       (message) => message.user === USER || !!message.thread_ts,
     );
 
-    console.log(`Deleting ${userMessagesAndThreads.length} message(s)...`);
+    console.log(
+      `Deleting ${userMessagesAndThreads.length} message(s) and/or thread(s)...`,
+    );
 
-    await deleteMessages(userMessagesAndThreads, false);
+    await deleteMessagesAndThreads(userMessagesAndThreads, false);
   }
 };
 
