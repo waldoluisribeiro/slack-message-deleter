@@ -47,7 +47,7 @@ const deleteMessage = async (unixTimestamp) => {
   };
 };
 
-(async () => {
+const main = async () => {
   const historyFetchForm = new FormData();
   historyFetchForm.append("token", TOKEN);
   historyFetchForm.append("channel", CHANNEL);
@@ -103,4 +103,6 @@ const deleteMessage = async (unixTimestamp) => {
       }
     }
   }
-})();
+};
+
+await main();
