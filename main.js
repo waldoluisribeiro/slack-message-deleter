@@ -23,11 +23,37 @@ const delay = async function (time) {
   });
 };
 
+const getThread = async (unixTimestamp) => {
+  const form = new FormData();
+  form.append("token", TOKEN);
+  form.append("channel", CHANNEL);
+  form.append("limit", MESSAGE_COUNT + "");
+  form.append("oldest", OLDEST_UNIX_TIMESTAMP);
+  form.append("ts", unixTimestamp);
+
+  const res = await fetch(
+    "https://" + WORKSPACE + "/api/conversations.replies",
+    {
+      headers: {
+        accept: "*/*",
+        "cache-control": "no-cache",
+        pragma: "no-cache",
+        cookie: COOKIE,
+      },
+      referrerPolicy: "no-referrer",
+      body: form,
+      method: "POST",
+    },
+  );
+
+  return await res.json();
+};
+
 const deleteMessage = async (unixTimestamp) => {
-  const deleteForm = new FormData();
-  deleteForm.append("token", TOKEN);
-  deleteForm.append("channel", CHANNEL);
-  deleteForm.append("ts", unixTimestamp);
+  const form = new FormData();
+  form.append("token", TOKEN);
+  form.append("channel", CHANNEL);
+  form.append("ts", unixTimestamp);
 
   const res = await fetch("https://" + WORKSPACE + "/api/chat.delete", {
     headers: {
@@ -37,7 +63,7 @@ const deleteMessage = async (unixTimestamp) => {
       cookie: COOKIE,
     },
     referrerPolicy: "no-referrer",
-    body: deleteForm,
+    body: form,
     method: "POST",
   });
 
@@ -47,20 +73,51 @@ const deleteMessage = async (unixTimestamp) => {
   };
 };
 
+const deleteMessages = async (messages, insideThread) => {
+  for (const message of messages) {
+    await delay(500);
+
+    if (message.thread_ts && !insideThread) {
+      console.log("Fetching thread messages...");
+      const thread = await getThread(message.thread_ts);
+      const userThreadMessages = thread.messages.filter(
+        (message) => message.user === USER,
+      );
+      console.log("Deleting thread messages...");
+      await deleteMessages(userThreadMessages, true);
+      continue;
+    }
+
+    const unixTimestamp = message.ts;
+    const { result, headers } = await deleteMessage(unixTimestamp);
+
+    if (result.error === RATELIMITED_ERROR) {
+      const retryAfterInMs = Number(headers.get("retry-after")) * 1000;
+      console.log(retryAfterInMs);
+      console.log(`ratelimited, retrying after ${retryAfterInMs}ms`);
+      await delay(retryAfterInMs);
+
+      await deleteMessage(unixTimestamp);
+    }
+  }
+};
+
 const main = async () => {
-  const historyFetchForm = new FormData();
-  historyFetchForm.append("token", TOKEN);
-  historyFetchForm.append("channel", CHANNEL);
-  historyFetchForm.append("limit", MESSAGE_COUNT + "");
-  historyFetchForm.append("oldest", OLDEST_UNIX_TIMESTAMP);
+  const form = new FormData();
+  form.append("token", TOKEN);
+  form.append("channel", CHANNEL);
+  form.append("limit", MESSAGE_COUNT + "");
+  form.append("oldest", OLDEST_UNIX_TIMESTAMP);
 
   let hasMore = true;
   let cursor;
 
   while (hasMore) {
     if (cursor) {
-      historyFetchForm.set("cursor", cursor);
+      form.set("cursor", cursor);
     }
+
+    console.log("Fetching messages...");
 
     // https://docs.slack.dev/reference/methods/conversations.history/
     const data = await fetch(
@@ -73,7 +130,7 @@ const main = async () => {
           cookie: COOKIE,
         },
         referrerPolicy: "no-referrer",
-        body: historyFetchForm,
+        body: form,
         method: "POST",
       },
     );
@@ -83,25 +140,15 @@ const main = async () => {
     hasMore = json.has_more;
     cursor = json.response_metadata?.next_cursor;
 
-    const userMessages = json.messages.filter(
-      (message) => message.user === USER,
-    );
-
-    for (const message of userMessages) {
-      await delay(500);
-
-      const unixTimestamp = message.ts;
-      const { result, headers } = await deleteMessage(unixTimestamp);
-
-      if (result.error === RATELIMITED_ERROR) {
-        const retryAfterInMs = Number(headers.get("retry-after")) * 1000;
-        console.log(retryAfterInMs);
-        console.log(`ratelimited, retrying after ${retryAfterInMs}ms`);
-        await delay(retryAfterInMs);
-
-        await deleteMessage(unixTimestamp);
-      }
+    if (!hasMore) {
+      console.log("Last page...");
     }
+
+    const userMessages = json.messages;
+
+    console.log(`Deleting ${userMessages.length} message(s)...`);
+
+    await deleteMessages(userMessages, false);
   }
 };
 
