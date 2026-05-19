@@ -144,11 +144,14 @@ const main = async () => {
       console.log("Last page...");
     }
 
-    const userMessages = json.messages;
+    // Filter for messages sent by the user, and threads created by anybody
+    const userMessagesAndThreads = json.messages.filter(
+      (message) => message.user === USER || !!message.thread_ts,
+    );
 
-    console.log(`Deleting ${userMessages.length} message(s)...`);
+    console.log(`Deleting ${userMessagesAndThreads.length} message(s)...`);
 
-    await deleteMessages(userMessages, false);
+    await deleteMessages(userMessagesAndThreads, false);
   }
 };
 
