@@ -17,6 +17,7 @@ assert(USER, "Please config your workspace information in config.json!");
 assert(TOKEN, "Please config your workspace information in config.json!");
 assert(COOKIE, "Please config your workspace information in config.json!");
 
+/** @param {number} time - milliseconds to wait */
 const delay = async function (time) {
   return new Promise((resolve, _) => {
     setTimeout(resolve, time);
@@ -30,7 +31,11 @@ const getHeaders = () => ({
   cookie: COOKIE,
 });
 
-// https://docs.slack.dev/reference/methods/conversations.history/
+/**
+ * @param {string} [cursor] - pagination cursor from a previous response
+ * @returns {Promise<{messages: object[], hasMore: boolean, nextCursor: string|undefined}>}
+ * @see https://docs.slack.dev/reference/methods/conversations.history/
+ */
 const getMessagesAndThreads = async (cursor) => {
   const form = new FormData();
   form.append("token", TOKEN);
@@ -60,7 +65,11 @@ const getMessagesAndThreads = async (cursor) => {
   };
 };
 
-// https://docs.slack.dev/reference/methods/conversations.replies/
+/**
+ * @param {string} unixTimestamp - the `ts` of the thread's parent message
+ * @returns {Promise<{messages: object[]}>}
+ * @see https://docs.slack.dev/reference/methods/conversations.replies/
+ */
 const getThread = async (unixTimestamp) => {
   const form = new FormData();
   form.append("token", TOKEN);
@@ -82,7 +91,11 @@ const getThread = async (unixTimestamp) => {
   return await res.json();
 };
 
-// https://docs.slack.dev/reference/methods/chat.delete/
+/**
+ * @param {string} unixTimestamp - the `ts` of the message to delete
+ * @returns {Promise<{result: object, headers: Headers}>}
+ * @see https://docs.slack.dev/reference/methods/chat.delete/
+ */
 const deleteMessage = async (unixTimestamp) => {
   console.log(`Deleting message ${unixTimestamp}...`);
 
@@ -104,6 +117,10 @@ const deleteMessage = async (unixTimestamp) => {
   };
 };
 
+/**
+ * @param {object[]} messages - Slack message objects to process
+ * @param {boolean} insideThread - `true` when already processing thread replies (prevents recursion)
+ */
 const deleteMessagesAndThreads = async (messages, insideThread) => {
   for (const message of messages) {
     // Slow down to minimise rate limit hits
