@@ -154,6 +154,11 @@ const main = async () => {
       nextCursor,
     } = await getMessagesAndThreads(cursor);
 
+    if (!Array.isArray(messages)) {
+      console.error("Something went wrong.");
+      process.exit(1);
+    }
+
     hasMore = stillHasMore;
     cursor = nextCursor;
 
@@ -173,6 +178,9 @@ const main = async () => {
 
     await deleteMessagesAndThreads(userMessagesAndThreads, false);
   }
+
+  console.log("Done.");
+  process.exit(0);
 };
 
 await main();
