@@ -1,58 +1,47 @@
 # Slack Message Deleter
 
-Bulk delete your messages on Slack. Using Slack's public Web API, no workspace app install needed.
+Bulk delete your own messages from a Slack channel. Uses Slack's public Web API — no workspace app installation required.
 
-## Getting Started
+Features:
+- Paginates through all channel history
+- Deletes your messages inside threads
+- Handles rate limiting automatically
 
-**Important:** Create `config.json` file from the template file:
+## Setup
 
-```
-mv config.json.example config.json
-```
+**1. Copy the config template:**
 
-Config your workspace and channel information:
-
-- `workspace`: Url to your workspace, for example `manga-hq.slack.com`
-- `targetChannelId`: ID of the channel you want to delete your message, for example: `C1234567890` or `D012345678` for DMs.
-- `currentUserId`: Your user ID, keep reading to see how to obtain it.
-- `token` and `cookie`: Keep reading to see how to obtain them.
-
-## 1. Obtain your User ID
-
-Click on your user name, select **View full profile**, on your profile screen, click **More** -> **Copy member ID**.
-
-## 2. Obtain the Token from Slack Web App
-
-Use your browser devtool and inspect the Network tab, search for any `users/info` API call and check the **request body**.
-
-Your Token should be something like:
-
-```
-xoxc-xxxxx...
+```sh
+cp config.json.example config.json
 ```
 
-## 3. Obtain the Cookie from Slack Web App
+**2. Fill in `config.json`:**
 
-Inspect any request and check the **request headers**, copy everything in the **Cookie** field.
+| Field | Description | Example |
+|---|---|---|
+| `workspace` | Your Slack workspace hostname | `acme.slack.com` |
+| `targetChannelId` | Channel to delete from | `C1234567890` (channel) or `D012345678` (DM) |
+| `currentUserId` | Your Slack user ID | `U012345678` |
+| `token` | Your session token | `xoxc-...` |
+| `cookie` | Your session cookie | (full `Cookie` header value) |
 
-## 4. Run the delete script
+## Finding your credentials
 
-Install the dependencies if you haven't:
+**User ID** — Click your profile picture → **Profile** → kebab menu next to **View as** → **Copy member ID**.
 
-```
-npm install
-```
+**Token** — Open Slack in a browser, open DevTools → Network tab, filter for `info`, and copy the `token` field from the request body.
 
-Run the delete script **after you configured everything in `config.json`**:
+**Cookie** — From the same DevTools Network tab, copy the entire value of the `Cookie` request header from any Slack API request.
 
-```
+## Run
+
+```sh
 npm run start
 ```
 
-# Important notes
+Requires Node.js 24 (see `.nvmrc`). No dependencies to install.
 
-This script does not required you to install any app into your workspace.
+## Notes
 
-If you are non-admin users, you can only delete your own messages.
-
-Even if you are admin users, in 1:1 DMs, you can only delete your own message.
+- This script only deletes your own messages by design. In 1:1 DMs, the API also enforces this — even admins cannot delete the other person's messages.
+- To start deletion from a specific point in time, edit `OLDEST_UNIX_TIMESTAMP` in `main.js`.
