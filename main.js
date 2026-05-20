@@ -23,6 +23,44 @@ const delay = async function (time) {
   });
 };
 
+const getHeaders = () => ({
+  accept: "*/*",
+  "cache-control": "no-cache",
+  pragma: "no-cache",
+  cookie: COOKIE,
+});
+
+// https://docs.slack.dev/reference/methods/conversations.history/
+const getMessagesAndThreads = async (cursor) => {
+  const form = new FormData();
+  form.append("token", TOKEN);
+  form.append("channel", CHANNEL);
+  form.append("limit", MESSAGE_COUNT + "");
+  form.append("oldest", OLDEST_UNIX_TIMESTAMP);
+  if (cursor) {
+    form.set("cursor", cursor);
+  }
+
+  const data = await fetch(
+    "https://" + WORKSPACE + "/api/conversations.history",
+    {
+      headers: getHeaders(),
+      referrerPolicy: "no-referrer",
+      body: form,
+      method: "POST",
+    },
+  );
+
+  const json = await data.json();
+
+  return {
+    messages: json.messages,
+    hasMore: json.has_more,
+    nextCursor: json.response_metadata?.next_cursor,
+  };
+};
+
+// https://docs.slack.dev/reference/methods/conversations.replies/
 const getThread = async (unixTimestamp) => {
   const form = new FormData();
   form.append("token", TOKEN);
@@ -34,12 +72,7 @@ const getThread = async (unixTimestamp) => {
   const res = await fetch(
     "https://" + WORKSPACE + "/api/conversations.replies",
     {
-      headers: {
-        accept: "*/*",
-        "cache-control": "no-cache",
-        pragma: "no-cache",
-        cookie: COOKIE,
-      },
+      headers: getHeaders(),
       referrerPolicy: "no-referrer",
       body: form,
       method: "POST",
@@ -49,19 +82,17 @@ const getThread = async (unixTimestamp) => {
   return await res.json();
 };
 
+// https://docs.slack.dev/reference/methods/chat.delete/
 const deleteMessage = async (unixTimestamp) => {
+  console.log(`Deleting message ${unixTimestamp}...`);
+
   const form = new FormData();
   form.append("token", TOKEN);
   form.append("channel", CHANNEL);
   form.append("ts", unixTimestamp);
 
   const res = await fetch("https://" + WORKSPACE + "/api/chat.delete", {
-    headers: {
-      accept: "*/*",
-      "cache-control": "no-cache",
-      pragma: "no-cache",
-      cookie: COOKIE,
-    },
+    headers: getHeaders(),
     referrerPolicy: "no-referrer",
     body: form,
     method: "POST",
@@ -75,11 +106,17 @@ const deleteMessage = async (unixTimestamp) => {
 
 const deleteMessagesAndThreads = async (messages, insideThread) => {
   for (const message of messages) {
+    // Slow down to minimise rate limit hits
     await delay(500);
 
+    // Messages in threads also have the `thread_ts` property,
+    // but since threads have a maximum depth of one,
+    // once we're inside a thread, it's safe to assume that's as far as we can go
     if (message.thread_ts && !insideThread) {
       console.log("Fetching thread messages...");
       const thread = await getThread(message.thread_ts);
+      // Here we only filter for messages sent by the user;
+      // there are no threads to be found inside threads
       const userThreadMessages = thread.messages.filter(
         (message) => message.user === USER,
       );
@@ -93,8 +130,9 @@ const deleteMessagesAndThreads = async (messages, insideThread) => {
 
     if (result.error === RATELIMITED_ERROR) {
       const retryAfterInMs = Number(headers.get("retry-after")) * 1000;
-      console.log(retryAfterInMs);
-      console.log(`ratelimited, retrying after ${retryAfterInMs}ms`);
+      console.log(
+        `ratelimited, retrying after ${new Intl.NumberFormat("en-GB").format(retryAfterInMs)}ms`,
+      );
       await delay(retryAfterInMs);
 
       await deleteMessage(unixTimestamp);
@@ -103,49 +141,29 @@ const deleteMessagesAndThreads = async (messages, insideThread) => {
 };
 
 const main = async () => {
-  const form = new FormData();
-  form.append("token", TOKEN);
-  form.append("channel", CHANNEL);
-  form.append("limit", MESSAGE_COUNT + "");
-  form.append("oldest", OLDEST_UNIX_TIMESTAMP);
-
+  // Keep track of whether there are more pages of messages/threads and the pagination cursor
   let hasMore = true;
   let cursor;
 
   while (hasMore) {
-    if (cursor) {
-      form.set("cursor", cursor);
-    }
-
     console.log("Fetching messages and threads...");
 
-    // https://docs.slack.dev/reference/methods/conversations.history/
-    const data = await fetch(
-      "https://" + WORKSPACE + "/api/conversations.history",
-      {
-        headers: {
-          accept: "*/*",
-          "cache-control": "no-cache",
-          pragma: "no-cache",
-          cookie: COOKIE,
-        },
-        referrerPolicy: "no-referrer",
-        body: form,
-        method: "POST",
-      },
-    );
+    const {
+      messages,
+      hasMore: stillHasMore,
+      nextCursor,
+    } = await getMessagesAndThreads(cursor);
 
-    const json = await data.json();
-
-    hasMore = json.has_more;
-    cursor = json.response_metadata?.next_cursor;
+    hasMore = stillHasMore;
+    cursor = nextCursor;
 
     if (!hasMore) {
       console.log("Last page...");
     }
 
-    // Filter for messages sent by the user, and threads created by anybody
-    const userMessagesAndThreads = json.messages.filter(
+    // Filter for messages sent by the user, and threads created by anybody,
+    // since any thread may contain messages sent by the user
+    const userMessagesAndThreads = messages.filter(
       (message) => message.user === USER || !!message.thread_ts,
     );
 
